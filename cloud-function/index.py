@@ -46,7 +46,8 @@ def handler(event, context):
         'statusCode': 200,
         "headers": {
             "Content-Type": "application/xml",
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
         },
         'body': gpx.to_xml(),
     }
