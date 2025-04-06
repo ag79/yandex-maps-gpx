@@ -6,18 +6,21 @@ import srtm
 from bs4 import BeautifulSoup
 
 
+local_cache_dir = "/tmp"
+
+
 def get_yandex_maps_json(url: str) -> dict:
 
     # Загружаем URL
     response = requests.get(url)
     if response.status_code != 200:
-        raise ConnectionError(f'Ошибка загрузки страницы: HTTP {response.status_code}')
+        raise ConnectionError(f'Page load error: HTTP {response.status_code}')
     
     # Находим элемент с нужным атрибутом
     soup = BeautifulSoup(response.text, 'html.parser')
     json_script = soup.find('script', attrs={'type': 'application/json', 'class': 'state-view'})
     if json_script is None:
-        raise AttributeError('На странице не найдены геоданные')
+        raise AttributeError('Geodata not found on page')
 
     # Преобразуем строку в JSON объект
     return json.loads(json_script.string)
@@ -91,7 +94,7 @@ def create_gpx(gpx=None, routes=None, tracks=None, track_segments=None, places=N
             gpx.waypoints.append(waypoint)
 
     if add_elevation:
-        elevation_data = srtm.get_data(local_cache_dir="./")
+        elevation_data = srtm.get_data(local_cache_dir=local_cache_dir)
 
         # tracks
         elevation_data.add_elevations(gpx, smooth=True)
