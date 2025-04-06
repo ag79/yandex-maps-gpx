@@ -1,9 +1,13 @@
 import unicodedata
+import urllib.parse
 from gpx_utils import get_yandex_maps_json, get_yandex_track_features, create_gpx
 
 
 def make_filename(string):
-    return ''.join(c if c.isalnum() else '_' for c in unicodedata.normalize('NFD', string))
+    # URL-encode for safety
+    s = ''.join(c if c.isalnum() else '_' for c in unicodedata.normalize('NFD', string))
+    s = s + '.gpx'
+    return urllib.parse.quote(s)
 
 
 def handler(event, context):
@@ -26,7 +30,8 @@ def handler(event, context):
     
     lines, placemarks = get_yandex_track_features(yandex_maps_json)
     
-    yandex_maps_json = make_filename(yandex_maps_json['config']['userMap']['title'])
+    encoded_filename = make_filename(yandex_maps_json['config']['userMap']['title'])
+    del yandex_maps_json
     
     line_param = query_params.get('lines', 'tracks')
     line_param = {parameter: lines if line_param == parameter else None \
@@ -41,7 +46,7 @@ def handler(event, context):
         'statusCode': 200,
         "headers": {
             "Content-Type": "application/xml",
-            "Content-Disposition": f'attachment; filename="{yandex_maps_json}.gpx"'
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
         },
         'body': gpx.to_xml(),
     }
