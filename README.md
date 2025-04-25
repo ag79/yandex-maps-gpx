@@ -8,7 +8,7 @@
 
 Добавляем в файл высотные данные из [SRTM](http://www2.jpl.nasa.gov/srtm/).
 
-Используем gpxpy, SRTM.py.
+Используем [gpxpy](https://github.com/tkrajina/gpxpy), [SRTM.py](https://github.com/tkrajina/srtm.py).
 
 ## Облачная функция [cloud-function](./cloud-function)
 
