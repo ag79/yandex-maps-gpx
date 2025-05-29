@@ -23,7 +23,6 @@ yc serverless function version create \
   --entrypoint index.handler \
   --memory 128m \
   --execution-timeout 10s \
-  --no-logging \
   --source-path ./cloud-function.zip
 
 # save function url for test.ipynb

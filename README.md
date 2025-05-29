@@ -12,6 +12,6 @@
 
 ## Облачная функция [cloud-function](./cloud-function)
 
-То же самое, реализованное в виде облачной функции на Yandex Cloud.
+То же самое с расширенным функционалом, реализованное в виде облачной функции на Yandex Cloud.
 
 Попробовать в работе: [https://ag79.github.io/yndx-gpx-web](https://ag79.github.io/yndx-gpx-web/)
