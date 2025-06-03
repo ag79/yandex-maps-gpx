@@ -31,6 +31,10 @@ def handler(event, context):
     '''
     query_params = event.get('queryStringParameters', {})
     
+    # Param converion and support for non-js form submits
+    query_params['placemarks'] = query_params.get('placemarks', '0') in {'1', 'on'}
+    query_params['add_elevation'] = query_params.get('add_elevation', '0') in {'1', 'on'}
+    
     try:
         ua = event['headers']['User-Agent']
         log(ua)
@@ -57,7 +61,6 @@ def handler(event, context):
     try:
         lines, placemarks = get_yandex_track_features(yandex_maps_json)
     except ValueError as e:
-        log(e)
         return {'statusCode': 400, 'body': str(e)}
     
     
@@ -77,8 +80,8 @@ def handler(event, context):
     
     # Note url params are str!
     gpx = create_gpx(**lines_param,
-                     places = placemarks if int(query_params.get('placemarks', 0)) else None, 
-                     add_elevation = int(query_params.get('add_elevation', 0)))
+                     places = placemarks if query_params['placemarks'] else None,
+                     add_elevation = query_params['add_elevation'])
 
     return {
         'statusCode': 200,
