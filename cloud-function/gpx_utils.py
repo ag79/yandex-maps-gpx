@@ -1,5 +1,6 @@
 import json
 import requests
+import logging
 import gpxpy
 import srtm
 from bs4 import BeautifulSoup
@@ -7,7 +8,6 @@ from bs4 import BeautifulSoup
 
 config = {
     "local_cache_dir": "/tmp", # for SRTM data
-    "logging": True
     }
 
 
@@ -15,11 +15,6 @@ class GeoObject:
     def __init__(self, name: str, coordinates: list):
         self.name = name
         self.coordinates = coordinates # list of 2 or list of lists of 2
-
-
-def log(message):
-    if config['logging']:
-        print(message)
 
 
 def get_yandex_maps_json(url: str) -> dict:
@@ -41,16 +36,20 @@ def get_yandex_maps_json(url: str) -> dict:
     # Загружаем URL
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise ConnectionError(f'Страница карты не загрузилась: HTTP {response.status_code}. \
-            Проверьте адрес и попробуйте через некоторое время.')
+        raise ConnectionError(
+            f'Страница карты не загрузилась: HTTP {response.status_code}. '
+            'Проверьте адрес и попробуйте через некоторое время.'
+            )
     
     # Находим элемент с нужным атрибутом
     soup = BeautifulSoup(response.text, 'html.parser')
     json_script = soup.find('script', attrs={'type': 'application/json', 'class': 'state-view'})
     if json_script is None:
-        raise ValueError('State-view не найден. Это точно Яндекс.Карты? \
-            Возможно, страница не загрузилась. \
-            Проверьте адрес и попробуйте через некоторое время.')
+        raise ValueError(
+            'State-view не найден. Это точно Яндекс.Карты? '
+            'Возможно, страница не загрузилась. '
+            'Проверьте адрес и попробуйте через некоторое время.'
+            )
 
     # Преобразуем строку в JSON объект
     return json.loads(json_script.string)
@@ -81,16 +80,16 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
                 lines.append(GeoObject(feature['title'], feature['geometry']['coordinates']))
             elif feature['type'] == 'placemark':
                 placemarks.append(GeoObject(feature['title'], feature['coordinates']))
-        log('Usermap')
+        logging.info('Usermap')
     except KeyError:
-        pass #log('Not a usermap')
+        pass # Not a usermap
         
     try:
         # normal map waypoints
         for point in yandex_maps_json['config']['routerResponse']['waypoints']:
             placemarks.append(GeoObject(point.get('name', 'POI'), point['coordinates']))
     except KeyError:
-        pass #log('No waypoints on map')
+        pass # No waypoints on map
 
     try:
         # normal map routes - маршруты навигации, проложенные яндексом
@@ -98,31 +97,42 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
         route_name = f'{route.get('type', 'Route')} {round(route['distance']['value']/1000,1):.1f} km'
         lines.append(GeoObject(route_name, route['coordinates']))
-        log(f'Normal map with route: {route_name}')
+        logging.info(f'Normal map with route: {route_name}')
     except KeyError:
-        pass #log('No routes on map')
+        pass # No routes on map
 
     try:
         # ruler - отрезки, созданные линейкой
         ruler = GeoObject('Ruler', [pt['coordinates'] for pt in yandex_maps_json['ruler']['points']])
         if len(ruler.coordinates) > 1:
             lines.append(ruler)
-            log('Normal map with ruler')
+            logging.info('Normal map with ruler')
     except KeyError:
-        pass #log('No ruler on map')
+        pass # No ruler on map
     
     if len(lines) + len(placemarks) == 0:
         if 'routePoints' in yandex_maps_json['config']:
-            log('Map with routePoints not supported')
-            raise ValueError('Данный тип маршрута не поддерживается (координаты трека не встроены в страницу). \
-                Предположительно, такое случается с длинными междугородними маршрутами (>400 км). \
-                Лучше перерисовать его в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.')
+            logging.warning('Map with routePoints not supported')
+            raise ValueError(
+                'Данный тип маршрута не поддерживается (координаты трека не встроены в страницу). '
+                'Предположительно, такое случается с длинными междугородними маршрутами (>300 км). '
+                'Сократите маршрут или перерисуйте его в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
+                )
+        elif 'bookmarksPublicList' in yandex_maps_json['config']:
+            logging.warning('Map with bookmarksPublicList not supported')
+            raise ValueError(
+                'Это похоже на карту с публичным спискм мест. '
+                'У них нет доступных координат, поэтому выгружать нечего. При необходимости '
+                'отметьте те же точки в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
+                )
         else:
-            log('No geodata on map')
-            raise ValueError('Поддерживаемые геоданные на карте не найдены. \
-                Либо на карте нет маршрута, либо данная его разновидность не поддерживается. \
-                Можно перерисовать маршрут в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a> \
-                - это самый надежный вариант.')
+            logging.warning('No known geodata on map')
+            raise ValueError(
+                'Поддерживаемые геоданные на карте не найдены. '
+                'Либо на карте нет маршрута, либо данная его разновидность не поддерживается. '
+                'Можно перерисовать маршрут в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a> '
+                '- это самый надежный вариант.'
+                )
     
     return lines, placemarks
 

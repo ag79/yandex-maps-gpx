@@ -1,7 +1,8 @@
 import urllib.parse
 import base64
+import logging
 import warnings
-from gpx_utils import get_yandex_maps_json, get_yandex_track_features, create_gpx, log, get_gpx_summary
+from gpx_utils import get_yandex_maps_json, get_yandex_track_features, create_gpx, get_gpx_summary
 
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)  # clean up logs from srtm.py issues
@@ -37,25 +38,25 @@ def handler(event, context):
     
     try:
         ua = event['headers']['User-Agent']
-        log(ua)
+        logging.info(ua)
         if ua.startswith('python-requests') or \
             ua.startswith('curl'):
             return {'statusCode': 403, 'body': 'Forbidden'}
     except KeyError:
-        log('No User-Agent?')
+        logging.error('No User-Agent?')
         return {'statusCode': 403, 'body': 'Forbidden'}
     
     url = query_params.get('url')
     if url is None:
         # client provides geo content in body
         yandex_maps_json = event.get('body')
-        log('Loaded state-view from body')
+        logging.debug('Loaded state-view from body')
     else:
-        log(url)
+        logging.info(url)
         try:
             yandex_maps_json = get_yandex_maps_json(url)
-        except ValueError as e:
-            log(e)
+        except Exception as e:
+            logging.error(e)
             return {'statusCode': 400, 'body': str(e)}
     
     try:
@@ -73,7 +74,7 @@ def handler(event, context):
         filename = yandex_maps_json['config']['userMap']['title']
     except KeyError:
         filename = 'output'
-    log(f'{filename} with {len(lines)} lines and {len(placemarks)} placemarks')
+    logging.info(f'{filename} with {len(lines)} lines and {len(placemarks)} placemarks')
     filename = f'{filename}_{line_param}.gpx'
         
     del yandex_maps_json
