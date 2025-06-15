@@ -1,11 +1,28 @@
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)  # clean up logs from srtm.py issues
+
 import urllib.parse
 import base64
 import logging
-import warnings
 from gpx_utils import get_yandex_maps_json, get_yandex_track_features, create_gpx, get_gpx_summary
 
 
-warnings.filterwarnings("ignore", category=SyntaxWarning)  # clean up logs from srtm.py issues
+def configure_logging():
+    logger = logging.getLogger()
+    formatter = logging.Formatter('%(message)s\n')
+    logger.setLevel(logging.INFO)
+
+    # Check if handlers exist (cloud environment)
+    if logger.handlers:
+        logger.handlers[0].setFormatter(formatter)
+    else:
+        # Local: Create new handler
+        loghandler = logging.StreamHandler()
+        loghandler.setFormatter(formatter)
+        logger.addHandler(loghandler)
+
+
+configure_logging()
 
 
 def make_filename(string):
@@ -56,15 +73,14 @@ def handler(event, context):
         try:
             yandex_maps_json = get_yandex_maps_json(url)
         except Exception as e:
-            logging.error(e)
+            logging.error(str(e))
             return {'statusCode': 400, 'body': str(e)}
     
     try:
         lines, placemarks = get_yandex_track_features(yandex_maps_json)
     except ValueError as e:
         return {'statusCode': 400, 'body': str(e)}
-    
-    
+
     line_param = query_params.get('lines', 'routes')
     lines_param = {parameter: lines if line_param == parameter else None \
         for parameter in ("tracks", "routes", "track_segments")}

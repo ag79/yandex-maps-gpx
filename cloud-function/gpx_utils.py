@@ -35,8 +35,14 @@ def get_yandex_maps_json(url: str) -> dict:
 
     # Загружаем URL
     response = requests.get(url, headers=headers)
-    if response.status_code != 200:
+    if response.status_code == 404:
         raise ConnectionError(
+            f'Страница не найдена: HTTP {response.status_code}. '
+            f'Проверьте <a href="{url}">введенный вами адрес</a> и скопируйте его правильно. '
+            'Рекомендуется пользоваться функцией "Поделиться" или копировать адрес из адресной строки браузера.'
+            )
+    elif response.status_code != 200:
+            raise ConnectionError(
             f'Страница карты не загрузилась: HTTP {response.status_code}. '
             'Проверьте адрес и попробуйте через некоторое время.'
             )
@@ -47,7 +53,7 @@ def get_yandex_maps_json(url: str) -> dict:
     if json_script is None:
         raise ValueError(
             'State-view не найден. Это точно Яндекс.Карты? '
-            'Возможно, страница не загрузилась. '
+            'Возможно, страница не загрузилась (такое бывает). '
             'Проверьте адрес и попробуйте через некоторое время.'
             )
 
@@ -115,7 +121,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
             logging.warning('Map with routePoints not supported')
             raise ValueError(
                 'Данный тип маршрута не поддерживается (координаты трека не встроены в страницу). '
-                'Предположительно, такое случается с длинными междугородними маршрутами (>300 км). '
+                'Такое случается с длинными маршрутами (>300 км) и исправлению не поддается. '
                 'Сократите маршрут или перерисуйте его в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
                 )
         elif 'bookmarksPublicList' in yandex_maps_json['config']:
@@ -205,6 +211,8 @@ def create_gpx(gpx=None, routes=None, tracks=None, track_segments=None, places=N
         # waypoints
         for point in gpx.waypoints:
             point.elevation = elevation_data.get_elevation(point.latitude, point.longitude)
+        
+        logging.info('Elevation added')
     
     return gpx
 
