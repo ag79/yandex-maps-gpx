@@ -19,8 +19,9 @@ class GeoObject:
 
 def get_yandex_maps_json(url: str) -> dict:
     
+    # imitate real browser
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en,ru",
         "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -87,6 +88,10 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
             elif feature['type'] == 'placemark':
                 placemarks.append(GeoObject(feature['title'], feature['coordinates']))
         logging.info('Usermap')
+    except TypeError:
+        js = json.dumps(yandex_maps_json)
+        logging.error(f'Usermap not found: {len(js)}')
+        logging.info(js[:128])
     except KeyError:
         pass # Not a usermap
         
@@ -112,7 +117,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         ruler = GeoObject('Ruler', [pt['coordinates'] for pt in yandex_maps_json['ruler']['points']])
         if len(ruler.coordinates) > 1:
             lines.append(ruler)
-            logging.info('Normal map with ruler')
+            logging.info('Found ruler')
     except KeyError:
         pass # No ruler on map
     

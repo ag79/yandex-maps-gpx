@@ -4,4 +4,4 @@
 *.gpx
 *.zip
 *.cfg
-__pycache__
+_*

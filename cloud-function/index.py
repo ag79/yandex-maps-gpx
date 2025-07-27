@@ -90,7 +90,7 @@ def handler(event, context):
         filename = yandex_maps_json['config']['userMap']['title']
     except KeyError:
         filename = 'output'
-    logging.info(f'{filename} with {len(lines)} lines and {len(placemarks)} placemarks')
+    logging.info(f'{filename} {line_param} with {len(lines)} lines and {len(placemarks)} placemarks')
     filename = f'{filename}_{line_param}.gpx'
         
     del yandex_maps_json
@@ -103,7 +103,7 @@ def handler(event, context):
     return {
         'statusCode': 200,
         "headers": {
-            "Content-Type": "application/xml",
+            "Content-Type": "application/gpx+xml",
             "Content-Disposition": f"attachment; filename*=UTF-8''{make_filename(filename)}",
             "X-GPX-Info": base64.b64encode(get_gpx_summary(gpx).encode('utf-8')).decode("utf-8"),
             "Access-Control-Expose-Headers": "Content-Disposition, X-GPX-Info"
