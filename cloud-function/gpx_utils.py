@@ -105,7 +105,11 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
     try:
         # normal map routes - маршруты навигации, проложенные яндексом
         selected_route = int(yandex_maps_json['config']['query'].get('rtn', 0))
-        route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
+        try:
+            route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
+        except IndexError: # one route on map and misleading index = 1?
+            logging.warning(f'Route index {selected_route} out of range')
+            route = yandex_maps_json['config']['routerResponse']['routes'][0]
         route_name = f'{route.get('type', 'Route')} {round(route['distance']['value']/1000,1):.1f} km'
         lines.append(GeoObject(route_name, route['coordinates']))
         logging.info(f'Normal map with route: {route_name}')
