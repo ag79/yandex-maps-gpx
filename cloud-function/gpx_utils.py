@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 config = {
     "local_cache_dir": "/tmp", # for SRTM data
+    "summary_output_limit": 10, # max number of entries per type in gpx summary
     }
 
 
@@ -39,11 +40,11 @@ def get_yandex_maps_json(url: str) -> dict:
     if response.status_code == 404:
         raise ConnectionError(
             f'Страница не найдена: HTTP {response.status_code}. '
-            f'Проверьте <a href="{url}">введенный вами адрес</a> и скопируйте его правильно. '
+            f'Проверьте <a href="{url}">ввеённый вами адрес</a> и скопируйте его правильно. '
             'Рекомендуется пользоваться функцией "Поделиться" или копировать адрес из адресной строки браузера.'
             )
     elif response.status_code != 200:
-            raise ConnectionError(
+        raise ConnectionError(
             f'Страница карты не загрузилась: HTTP {response.status_code}. '
             'Проверьте адрес и попробуйте через некоторое время.'
             )
@@ -55,9 +56,14 @@ def get_yandex_maps_json(url: str) -> dict:
         raise ValueError(
             'State-view не найден. Это точно Яндекс.Карты? '
             'Возможно, страница не загрузилась (такое бывает). '
-            'Проверьте адрес и попробуйте через некоторое время.'
+            'Проверьте <a href="{url}">адрес</a> и попробуйте через некоторое время.'
             )
-
+    if len(json_script.string) < 1024: # min practical state-view length 50Kb
+        logging.warning(f'State-view length: {len(json_script.string)}')
+        raise ValueError(
+            'Страница карты не загрузилась должным образом (такое бывает). '
+            'Проверьте <a href="{url}">её адрес</a> и попробуйте через некоторое время.'
+            )
     # Преобразуем строку в JSON объект
     return json.loads(json_script.string)
 
@@ -87,11 +93,13 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
                 lines.append(GeoObject(feature['title'], feature['geometry']['coordinates']))
             elif feature['type'] == 'placemark':
                 placemarks.append(GeoObject(feature['title'], feature['coordinates']))
-        logging.info('Usermap')
+        logging.info(f'Found usermap with {len(lines)} lines and {len(placemarks)} placemarks')
     except TypeError:
-        js = json.dumps(yandex_maps_json)
-        logging.error(f'Usermap not found: {len(js)}')
-        logging.info(js[:128])
+        logging.error(f'State-view length: {len(json.dumps(yandex_maps_json))}')
+        raise ValueError(
+            'Cтраница карты не (правильно) загрузилась. '
+            'Проверьте адрес и попробуйте через некоторое время.'
+            )
     except KeyError:
         pass # Not a usermap
         
@@ -99,6 +107,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         # normal map waypoints
         for point in yandex_maps_json['config']['routerResponse']['waypoints']:
             placemarks.append(GeoObject(point.get('name', 'POI'), point['coordinates']))
+        logging.info(f'Found {len(placemarks)} waypoints')
     except KeyError:
         pass # No waypoints on map
 
@@ -108,20 +117,27 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         try:
             route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
         except IndexError: # one route on map and misleading index = 1?
-            logging.warning(f'Route index {selected_route} out of range')
+            logging.warning(f'Route index {selected_route} out of range {len(yandex_maps_json["config"]["routerResponse"]["routes"])}')
             route = yandex_maps_json['config']['routerResponse']['routes'][0]
         route_name = f'{route.get('type', 'Route')} {round(route['distance']['value']/1000,1):.1f} km'
         lines.append(GeoObject(route_name, route['coordinates']))
-        logging.info(f'Normal map with route: {route_name}')
+        logging.info(f'Found route {selected_route}/{len(yandex_maps_json["config"]["routerResponse"]["routes"])}: {route_name}')
     except KeyError:
         pass # No routes on map
+    except TypeError:
+        if type(yandex_maps_json['config']['query']['rtn']) == list:
+            logging.error('Error: doubled url')
+            raise ValueError(
+                'Проверьте введенный вами адрес и вставьте его правильно (один раз). '
+                'Рекомендуется пользоваться функцией "Поделиться" или копировать адрес из адресной строки браузера.'
+                ) # Broken URL due to user error - autocorrected at frontend
 
     try:
         # ruler - отрезки, созданные линейкой
         ruler = GeoObject('Ruler', [pt['coordinates'] for pt in yandex_maps_json['ruler']['points']])
         if len(ruler.coordinates) > 1:
             lines.append(ruler)
-            logging.info('Found ruler')
+            logging.info(f'Found ruler with {len(ruler.coordinates)} points')
     except KeyError:
         pass # No ruler on map
     
@@ -129,7 +145,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         if 'routePoints' in yandex_maps_json['config']:
             logging.warning('Map with routePoints not supported')
             raise ValueError(
-                'Данный тип маршрута не поддерживается (координаты трека не встроены в страницу). '
+                'Данный тип маршрута не поддерживается (координаты не встроены в страницу). '
                 'Такое случается с длинными маршрутами (>300 км) и исправлению не поддается. '
                 'Сократите маршрут или перерисуйте его в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
                 )
@@ -226,28 +242,34 @@ def create_gpx(gpx=None, routes=None, tracks=None, track_segments=None, places=N
     return gpx
 
 
-def get_gpx_summary(gpx: gpxpy.gpx.GPX) -> str:
+def get_gpx_summary(gpx: gpxpy.gpx.GPX, output_limit=config['summary_output_limit']) -> str:
     summary = []
     
     # Waypoints section
     if gpx.waypoints:
-        summary.append("Путевые точки:")
-        for waypoint in gpx.waypoints:
+        summary.append(f"Путевые точки ({len(gpx.waypoints)}):")
+        for waypoint in gpx.waypoints[:output_limit]:
             line = f"- {waypoint.name or 'Без имени'}"
             if waypoint.elevation is not None:
                 line += f" - {int(round(waypoint.elevation))} м"
             summary.append(line)
+        if len(gpx.waypoints) > output_limit:
+            summary.append('...')
     
     # Tracks section
     if gpx.tracks:
-        summary.append("Треки:")
-        for track in gpx.tracks:
+        summary.append(f"Треки ({len(gpx.tracks)}):")
+        for track in gpx.tracks[:output_limit]:
             summary.append(f" - {track.name or 'Без имени'} - {track.length_2d() / 1000:.1f} км")
+        if len(gpx.tracks) > output_limit:
+            summary.append('...')
     
     # Routes section
     if gpx.routes:
-        summary.append("Маршруты:")
-        for route in gpx.routes:
+        summary.append(f"Маршруты ({len(gpx.routes)}):")
+        for route in gpx.routes[:output_limit]:
             summary.append(f"- {route.name or 'Без имени'} - {route.length() / 1000:.1f} км")
+        if len(gpx.routes) > output_limit:
+            summary.append('...')
     
     return '\n'.join(summary)
