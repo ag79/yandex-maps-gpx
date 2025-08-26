@@ -22,7 +22,7 @@ def get_yandex_maps_json(url: str) -> dict:
     
     # imitate real browser
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/142.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en,ru",
         "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -56,13 +56,13 @@ def get_yandex_maps_json(url: str) -> dict:
         raise ValueError(
             'State-view не найден. Это точно Яндекс.Карты? '
             'Возможно, страница не загрузилась (такое бывает). '
-            'Проверьте <a href="{url}">адрес</a> и попробуйте через некоторое время.'
+            f'Проверьте <a href="{url}">адрес</a> и попробуйте через некоторое время.'
             )
     if len(json_script.string) < 1024: # min practical state-view length 50Kb
         logging.warning(f'State-view length: {len(json_script.string)}')
         raise ValueError(
             'Страница карты не загрузилась должным образом (такое бывает). '
-            'Проверьте <a href="{url}">её адрес</a> и попробуйте через некоторое время.'
+            f'Проверьте <a href="{url}">её адрес</a> и попробуйте через некоторое время.'
             )
     # Преобразуем строку в JSON объект
     return json.loads(json_script.string)
