@@ -57,6 +57,7 @@ def get_yandex_maps_json(url: str) -> dict:
             'State-view не найден. Это точно Яндекс.Карты? '
             'Возможно, страница не загрузилась (такое бывает). '
             f'Проверьте <a href="{url}">адрес</a> и попробуйте через некоторое время.'
+            ' Почитайте <a href="help.html">справку</a>.'
             )
     if len(json_script.string) < 1024: # min practical state-view length 50Kb
         logging.warning(f'State-view length: {len(json_script.string)}')
@@ -107,30 +108,32 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         # normal map waypoints
         for point in yandex_maps_json['config']['routerResponse']['waypoints']:
             placemarks.append(GeoObject(point.get('name', 'POI'), point['coordinates']))
-        logging.info(f'Found {len(placemarks)} waypoints')
+        if len(placemarks) > 0:
+            logging.info(f'Found {len(placemarks)} waypoints')
     except KeyError:
         pass # No waypoints on map
 
-    try:
+    if ('rtn' in yandex_maps_json['config']['query']) and (len(yandex_maps_json['config']['routerResponse']['routes']) > 0):
         # normal map routes - маршруты навигации, проложенные яндексом
-        selected_route = int(yandex_maps_json['config']['query'].get('rtn', 0))
         try:
-            route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
-        except IndexError: # one route on map and misleading index = 1?
-            logging.warning(f'Route index {selected_route} out of range {len(yandex_maps_json["config"]["routerResponse"]["routes"])}')
-            route = yandex_maps_json['config']['routerResponse']['routes'][0]
-        route_name = f'{route.get('type', 'Route')} {round(route['distance']['value']/1000,1):.1f} km'
-        lines.append(GeoObject(route_name, route['coordinates']))
-        logging.info(f'Found route {selected_route}/{len(yandex_maps_json["config"]["routerResponse"]["routes"])}: {route_name}')
-    except KeyError:
-        pass # No routes on map
-    except TypeError:
-        if type(yandex_maps_json['config']['query']['rtn']) == list:
-            logging.error('Error: doubled url')
-            raise ValueError(
-                'Проверьте введенный вами адрес и вставьте его правильно (один раз). '
-                'Рекомендуется пользоваться функцией "Поделиться" или копировать адрес из адресной строки браузера.'
-                ) # Broken URL due to user error - autocorrected at frontend
+            selected_route = yandex_maps_json['config']['query']['rtn']
+            try:
+                route = yandex_maps_json['config']['routerResponse']['routes'][selected_route]
+            except IndexError: # one route on map and misleading index = 1?
+                logging.warning(f'Route index {selected_route} out of range {len(yandex_maps_json["config"]["routerResponse"]["routes"])}')
+                route = yandex_maps_json['config']['routerResponse']['routes'][0]
+            route_name = f'{route.get('type', 'Route')} {round(route['distance']['value']/1000,1):.1f} km'
+            lines.append(GeoObject(route_name, route['coordinates']))
+            logging.info(f'Found route {selected_route}/{len(yandex_maps_json["config"]["routerResponse"]["routes"])}: {route_name}')
+        except KeyError:
+            pass # No routes on map
+        except TypeError:
+            if type(yandex_maps_json['config']['query']['rtn']) == list:
+                logging.error('Error: doubled url')
+                raise ValueError(
+                    'Проверьте введенный вами адрес и вставьте его правильно (один раз). '
+                    'Рекомендуется пользоваться функцией "Поделиться" или копировать адрес из адресной строки браузера.'
+                    ) # Broken URL due to user error - autocorrected at frontend
 
     try:
         # ruler - отрезки, созданные линейкой
@@ -142,12 +145,18 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
         pass # No ruler on map
     
     if len(lines) + len(placemarks) == 0:
-        if 'routePoints' in yandex_maps_json['config']:
+        if 'error' in yandex_maps_json['config']['routerResponse']:
+            logging.error(f'routerResponse: {yandex_maps_json['config']['routerResponse']['error']}')
+            raise ValueError(
+                'Карты не смогли построить маршрут. Измените его параметры и попробуйте снова.'
+                )
+        elif 'routePoints' in yandex_maps_json['config']:
             logging.warning('Map with routePoints not supported')
             raise ValueError(
                 'Данный тип маршрута не поддерживается (координаты не встроены в страницу). '
                 'Такое случается с длинными маршрутами (>300 км) и исправлению не поддается. '
                 'Сократите маршрут или перерисуйте его в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
+                ' Почитайте <a href="help.html">справку</a>.'
                 )
         elif 'bookmarksPublicList' in yandex_maps_json['config']:
             logging.warning('Map with bookmarksPublicList not supported')
@@ -155,6 +164,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
                 'Это похоже на карту с публичным спискм мест. '
                 'У них нет доступных координат, поэтому выгружать нечего. При необходимости '
                 'отметьте те же точки в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a>.'
+                ' Почитайте <a href="help.html">справку</a>.'
                 )
         else:
             logging.warning('No known geodata on map')
@@ -163,6 +173,7 @@ def get_yandex_track_features(yandex_maps_json: dict) -> tuple[list, list]:
                 'Либо на карте нет маршрута, либо данная его разновидность не поддерживается. '
                 'Можно перерисовать маршрут в <a href="https://yandex.ru/map-constructor/">конструкторе карт</a> '
                 '- это самый надежный вариант.'
+                ' Почитайте <a href="help.html">справку</a>.'
                 )
     
     return lines, placemarks
@@ -245,17 +256,6 @@ def create_gpx(gpx=None, routes=None, tracks=None, track_segments=None, places=N
 def get_gpx_summary(gpx: gpxpy.gpx.GPX, output_limit=config['summary_output_limit']) -> str:
     summary = []
     
-    # Waypoints section
-    if gpx.waypoints:
-        summary.append(f"Путевые точки ({len(gpx.waypoints)}):")
-        for waypoint in gpx.waypoints[:output_limit]:
-            line = f"- {waypoint.name or 'Без имени'}"
-            if waypoint.elevation is not None:
-                line += f" - {int(round(waypoint.elevation))} м"
-            summary.append(line)
-        if len(gpx.waypoints) > output_limit:
-            summary.append('...')
-    
     # Tracks section
     if gpx.tracks:
         summary.append(f"Треки ({len(gpx.tracks)}):")
@@ -270,6 +270,17 @@ def get_gpx_summary(gpx: gpxpy.gpx.GPX, output_limit=config['summary_output_limi
         for route in gpx.routes[:output_limit]:
             summary.append(f"- {route.name or 'Без имени'} - {route.length() / 1000:.1f} км")
         if len(gpx.routes) > output_limit:
+            summary.append('...')
+    
+    # Waypoints section
+    if gpx.waypoints:
+        summary.append(f"Путевые точки ({len(gpx.waypoints)}):")
+        for waypoint in gpx.waypoints[:output_limit]:
+            line = f"- {waypoint.name or 'Без имени'}"
+            if waypoint.elevation is not None:
+                line += f" - {int(round(waypoint.elevation))} м"
+            summary.append(line)
+        if len(gpx.waypoints) > output_limit:
             summary.append('...')
     
     return '\n'.join(summary)
